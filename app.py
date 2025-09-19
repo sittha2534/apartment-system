@@ -1,0 +1,293 @@
+from flask import Flask, render_template, request, redirect, url_for, session, flash
+import sqlite3
+from datetime import datetime
+
+app = Flask(__name__)
+app.secret_key = 'your_secret_key'
+
+# ------------------------------
+# ฟังก์ชันเชื่อมต่อ SQLite
+# ------------------------------
+def get_db():
+    conn = sqlite3.connect("rooms.db")
+    conn.row_factory = sqlite3.Row  # ให้ fetch เป็น dict-like
+    return conn
+
+# ------------------------------
+# หน้า login
+# ------------------------------
+@app.route('/login', methods=['GET', 'POST'])
+def login():
+    if request.method == 'POST':
+        username = request.form['username']
+        password = request.form['password']
+
+        conn = get_db()
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM users WHERE username=? AND password=?", (username, password))
+        user = cursor.fetchone()
+        conn.close()
+
+        if user:
+            session['user'] = username
+            return redirect(url_for('home'))
+        else:
+            flash("ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง", "danger")
+            return redirect(url_for('login'))
+    return render_template('login.html')
+
+# ------------------------------
+# logout
+# ------------------------------
+@app.route('/logout')
+def logout():
+    session.pop('user', None)
+    return redirect(url_for('login'))
+
+# ------------------------------
+# หน้า Home
+# ------------------------------
+@app.route('/')
+def home():
+    if 'user' not in session:
+        return redirect(url_for('login'))
+
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute("SELECT * FROM rooms")
+    rooms = [dict(r) for r in cursor.fetchall()]  # แปลงเป็น dict
+
+    for room in rooms:
+        cursor.execute(
+            "SELECT electricity_unit, water_unit, recorded_at FROM room_meters WHERE room_id=? ORDER BY recorded_at DESC LIMIT 1",
+            (room['id'],)
+        )
+        meter = cursor.fetchone()
+        if meter:
+            meter = dict(meter)
+            room['electricity_unit'] = meter['electricity_unit']
+            room['water_unit'] = meter['water_unit']
+            # แปลง recorded_at เป็น YYYY-MM
+            room['recorded_at'] = meter['recorded_at'][:7] if meter['recorded_at'] else None
+        else:
+            room['electricity_unit'] = None
+            room['water_unit'] = None
+            room['recorded_at'] = None
+
+    cursor.execute("SELECT * FROM settings WHERE id=1")
+    config = cursor.fetchone()
+    conn.close()
+
+    default_rooms = []
+    if config and config['default_rooms']:
+        default_rooms = [r.strip() for r in config['default_rooms'].split(',') if r.strip()]
+
+    return render_template('index.html', rooms=rooms, config=config, default_rooms=default_rooms)
+
+# ------------------------------
+# อัพเดต meter
+# ------------------------------
+@app.route('/update_meter/<int:room_id>', methods=['POST'])
+def update_meter(room_id):
+    if 'user' not in session:
+        return redirect(url_for('login'))
+
+    electricity_unit = int(request.form.get('electricity_unit'))
+    water_unit = int(request.form.get('water_unit'))
+    recorded_month = request.form.get('recorded_month')  # YYYY-MM
+
+    try:
+        recorded_at = datetime.strptime(recorded_month + "-01", "%Y-%m-%d").date()
+    except:
+        flash("กรุณาเลือกเดือนให้ถูกต้อง", "danger")
+        return redirect(url_for('home'))
+
+    conn = get_db()
+    cursor = conn.cursor()
+
+    # ตรวจสอบว่ามีบันทึกของเดือนนั้นอยู่แล้วหรือไม่
+    cursor.execute("""
+        SELECT id FROM room_meters 
+        WHERE room_id = ? AND strftime('%Y-%m', recorded_at) = ?
+    """, (room_id, recorded_month))
+    exists = cursor.fetchone()
+
+    if exists:
+        flash("มีข้อมูลเดือนนี้แล้ว ไม่สามารถบันทึกซ้ำได้", "warning")
+    else:
+        cursor.execute(
+            "INSERT INTO room_meters (room_id, electricity_unit, water_unit, recorded_at) VALUES (?, ?, ?, ?)",
+            (room_id, electricity_unit, water_unit, recorded_at)
+        )
+        conn.commit()
+        flash("บันทึกข้อมูลประจำเดือนสำเร็จ", "success")
+
+    conn.close()
+    return redirect(url_for('home'))
+
+# ------------------------------
+# ตั้งค่าและเพิ่มห้อง
+# ------------------------------
+@app.route('/settings', methods=['GET', 'POST'])
+def settings():
+    if 'user' not in session:
+        return redirect(url_for('login'))
+
+    conn = get_db()
+    cursor = conn.cursor()
+
+    if request.method == 'POST':
+        if 'name' in request.form:
+            # เพิ่มห้อง
+            name = request.form['name']
+            status = request.form['status']
+            tenant_name = request.form.get('tenant_name', '')
+            room_price = float(request.form.get('room_price', 0))
+            water_rate = float(request.form.get('water_rate', 0))
+            electricity_rate = float(request.form.get('electricity_rate', 0))
+
+            cursor.execute("""
+                INSERT INTO rooms (name, status, tenant_name, room_price, water_rate, electricity_rate)
+                VALUES (?, ?, ?, ?, ?, ?)
+            """, (name, status, tenant_name, room_price, water_rate, electricity_rate))
+            conn.commit()
+            flash("เพิ่มห้องสำเร็จ", "success")
+        else:
+            # อัพเดต settings
+            site_name = request.form['site_name']
+            welcome_text = request.form['welcome_text']
+            default_rooms = request.form.get('default_rooms', '')
+
+            cursor.execute("""
+                UPDATE settings SET site_name=?, welcome_text=?, default_rooms=? WHERE id=1
+            """, (site_name, welcome_text, default_rooms))
+            conn.commit()
+            flash("บันทึกตั้งค่าสำเร็จ", "success")
+
+        return redirect(url_for('settings'))
+
+    cursor.execute("SELECT * FROM settings WHERE id=1")
+    config = cursor.fetchone()
+
+    cursor.execute("SELECT * FROM rooms")
+    rooms = [dict(r) for r in cursor.fetchall()]
+    conn.close()
+    return render_template('settings.html', config=config, rooms=rooms)
+
+# ------------------------------
+# ลบห้อง
+# ------------------------------
+@app.route('/delete_room/<int:room_id>', methods=['POST'])
+def delete_room(room_id):
+    if 'user' not in session:
+        return redirect(url_for('login'))
+
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute("DELETE FROM room_meters WHERE room_id=?", (room_id,))
+    cursor.execute("DELETE FROM rooms WHERE id=?", (room_id,))
+    conn.commit()
+    conn.close()
+    flash("ลบห้องเรียบร้อยแล้ว", "warning")
+    return redirect(url_for('settings'))
+
+# ------------------------------
+# พิมพ์ใบเสร็จ
+# ------------------------------
+@app.route('/receipt/<int:room_id>')
+def print_receipt(room_id):
+    if 'user' not in session:
+        return redirect(url_for('login'))
+
+    conn = get_db()
+    cursor = conn.cursor()
+
+    # room
+    row = cursor.execute("SELECT * FROM rooms WHERE id=?", (room_id,)).fetchone()
+    room = dict(row) if row else None
+
+    # meters
+    cursor.execute("""
+        SELECT * FROM room_meters 
+        WHERE room_id=? 
+        ORDER BY recorded_at DESC 
+        LIMIT 2
+    """, (room_id,))
+    meters = [dict(m) for m in cursor.fetchall()]
+
+    latest = meters[0] if len(meters) >= 1 else None
+    previous = meters[1] if len(meters) >= 2 else None
+
+    # แปลง recorded_at เป็น YYYY-MM
+    if latest and latest['recorded_at']:
+        latest['recorded_at'] = latest['recorded_at'][:7]
+    if previous and previous['recorded_at']:
+        previous['recorded_at'] = previous['recorded_at'][:7]
+
+    conn.close()
+    return render_template('receipt.html', room=room, latest=latest, previous=previous, now=datetime.now())
+
+# ------------------------------
+# แก้ไข meter ล่าสุด
+# ------------------------------
+@app.route('/edit_latest_meter/<int:room_id>', methods=['POST'])
+def edit_latest_meter(room_id):
+    if 'user' not in session:
+        return redirect(url_for('login'))
+
+    try:
+        water_unit = int(request.form.get('water_unit'))
+        electricity_unit = int(request.form.get('electricity_unit'))
+        recorded_month = request.form.get('recorded_month')
+        recorded_at = datetime.strptime(recorded_month + "-01", "%Y-%m-%d").date()
+    except:
+        flash("ข้อมูลไม่ถูกต้อง กรุณาตรวจสอบอีกครั้ง", "danger")
+        return redirect(url_for('print_receipt', room_id=room_id))
+
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute("""
+        SELECT id FROM room_meters
+        WHERE room_id = ?
+        ORDER BY recorded_at DESC
+        LIMIT 1
+    """, (room_id,))
+    row = cursor.fetchone()
+
+    if row:
+        meter_id = row['id']
+        cursor.execute("""
+            UPDATE room_meters 
+            SET water_unit = ?, electricity_unit = ?, recorded_at = ?
+            WHERE id = ?
+        """, (water_unit, electricity_unit, recorded_at, meter_id))
+        conn.commit()
+        flash("แก้ไขหน่วยล่าสุดสำเร็จ", "success")
+    else:
+        flash("ไม่พบข้อมูลหน่วยล่าสุดที่จะแก้ไข", "danger")
+
+    conn.close()
+    return redirect(url_for('print_receipt', room_id=room_id))
+
+# ------------------------------
+# Route ทดสอบ DB
+# ------------------------------
+@app.route('/test_db')
+def test_db():
+    try:
+        conn = get_db()
+        cursor = conn.cursor()
+        cursor.execute("SELECT name FROM sqlite_master WHERE type='table'")
+        tables = cursor.fetchall()
+        cursor.execute("SELECT * FROM users")
+        users = cursor.fetchall()
+        conn.close()
+        return f"✅ Database Connected!<br>Tables: {tables}<br>Users: {users}"
+    except Exception as e:
+        return f"❌ Cannot connect to DB: {e}"
+
+# ------------------------------
+# รัน Flask
+# ------------------------------
+if __name__ == '__main__':
+    app.run(debug=True)

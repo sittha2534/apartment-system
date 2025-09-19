@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8" />
+    <title>ตั้งค่าเว็บไซต์</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet" />
+</head>
+<body>
+<div class="container mt-4">
+
+    <h2>ตั้งค่าเว็บไซต์</h2>
+
+    <!-- แสดง flash message -->
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}
+        <div class="position-fixed top-0 start-50 translate-middle-x mt-3" style="z-index:1050; min-width:300px;">
+          {% for category, message in messages %}
+            <div class="alert alert-{{ category }} alert-dismissible fade show" role="alert">
+              {{ message }}
+              <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+            </div>
+          {% endfor %}
+        </div>
+      {% endif %}
+    {% endwith %}
+
+    <form method="POST" action="{{ url_for('settings') }}">
+        <div class="mb-3">
+            <label>ชื่อเว็บไซต์</label>
+            <input type="text" name="site_name" class="form-control" value="{{ config.site_name if config else '' }}">
+        </div>
+        <div class="mb-3">
+            <label>ข้อความต้อนรับ</label>
+            <textarea name="welcome_text" class="form-control" rows="3">{{ config.welcome_text if config else '' }}</textarea>
+        </div>
+        <div class="mb-3">
+            <label>ห้องเริ่มต้น (คั่นด้วย , เช่น A1,A2,A3)</label>
+            <input type="text" name="default_rooms" class="form-control" value="{{ config.default_rooms if config else '' }}">
+        </div>
+        <button type="submit" class="btn btn-primary mb-4">บันทึกตั้งค่า</button>
+    </form>
+
+    <hr />
+
+    <h3>รายการห้องพัก</h3>
+    <table class="table table-bordered">
+        <thead>
+            <tr>
+                <th>ชื่อห้อง</th>
+                <th>สถานะ</th>
+                <th>ชื่อผู้เช่า</th>
+                <th>ค่าห้อง</th>
+                <th>อัตราค่าน้ำ</th>
+                <th>อัตราค่าไฟ</th>
+                <th>ลบ</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for room in rooms %}
+            <tr>
+                <td>{{ room.name }}</td>
+                <td>{{ room.status }}</td>
+                <td>{{ room.tenant_name }}</td>
+                <td>{{ "{:,.2f}".format(room.room_price) }}</td>
+                <td>{{ "{:,.2f}".format(room.water_rate) }}</td>
+                <td>{{ "{:,.2f}".format(room.electricity_rate) }}</td>
+                <td>
+                    <form method="POST" action="{{ url_for('delete_room', room_id=room.id) }}" onsubmit="return confirm('ยืนยันการลบห้องนี้?');">
+                        <button type="submit" class="btn btn-sm btn-danger">ลบ</button>
+                    </form>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+
+    <hr />
+
+    <h3>เพิ่มห้องพักใหม่</h3>
+    <form method="POST" action="{{ url_for('settings') }}">
+        <div class="mb-3">
+            <label>ชื่อห้อง</label>
+            <input type="text" name="name" class="form-control" required>
+        </div>
+        <div class="mb-3">
+            <label>สถานะ</label>
+            <input type="text" name="status" class="form-control" required>
+        </div>
+        <div class="mb-3">
+            <label>ชื่อผู้เช่า</label>
+            <input type="text" name="tenant_name" class="form-control">
+        </div>
+        <div class="mb-3">
+            <label>ค่าห้อง</label>
+            <input type="number" step="0.01" name="room_price" class="form-control" required>
+        </div>
+        <div class="mb-3">
+            <label>อัตราค่าน้ำ</label>
+            <input type="number" step="0.01" name="water_rate" class="form-control" required>
+        </div>
+        <div class="mb-3">
+            <label>อัตราค่าไฟ</label>
+            <input type="number" step="0.01" name="electricity_rate" class="form-control" required>
+        </div>
+        <button type="submit" class="btn btn-success">เพิ่มห้อง</button>
+    </form>
+
+</div>
+
+<div class="container mt-4">
+    <!-- ฟอร์มตั้งค่า และตาราง -->
+
+    <a href="{{ url_for('home') }}" class="btn btn-secondary mt-3">กลับหน้าหลัก</a>
+</div>
+
+
+<script src="https://cdn.jsdelivr.net/npm/@popperjs/core@2.11.8/dist/umd/popper.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.min.js"></script>
+<script>
+  setTimeout(() => {
+    const alertNode = document.querySelector('.alert');
+    if (alertNode) {
+      bootstrap.Alert.getOrCreateInstance(alertNode).close();
+    }
+  }, 4000);
+</script>
+</body>
+</html>

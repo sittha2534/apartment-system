@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <title>ใบเสร็จห้อง {{ room.name }}</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet" />
+    <style>
+        @media print {
+            .no-print { display: none; }
+        }
+    </style>
+</head>
+<body class="p-4">
+<div class="container border p-4">
+    <h2 class="text-center">ใบเสร็จค่าห้อง</h2>
+    <hr />
+    <p><strong>ชื่อห้อง:</strong> {{ room.name }}</p>
+    <p><strong>ชื่อผู้เช่า:</strong> {{ room.tenant_name or '-' }}</p>
+
+    {% if latest and latest.recorded_at %}
+        <p><strong>ประจำเดือน:</strong> {{ latest.recorded_at }}</p>
+    {% endif %}
+
+    <hr>
+    <table class="table table-bordered">
+        <thead class="table-light">
+            <tr>
+                <th>รายละเอียด</th>
+                <th>หน่วยก่อนหน้า / ล่าสุด</th>
+                <th>หน่วยที่ใช้</th>
+                <th>หน่วยละ</th>
+                <th>รวม</th>
+            </tr>
+        </thead>
+        <tbody>
+            <!-- ค่าห้อง -->
+            <tr>
+                <td>ค่าห้อง</td>
+                <td>-</td>
+                <td>1 เดือน</td>
+                <td>{{ "{:,.2f}".format(room.room_price) }}</td>
+                <td>{{ "{:,.2f}".format(room.room_price) }}</td>
+            </tr>
+
+            <!-- ค่าน้ำ -->
+            <tr>
+                <td>ค่าน้ำ</td>
+                <td>{{ previous.water_unit if previous else 0 }} / {{ latest.water_unit if latest else 0 }}</td>
+                <td>{{ latest.water_unit - previous.water_unit if latest and previous else 0 }} หน่วย</td>
+                <td>{{ "{:,.2f}".format(room.water_rate) }}</td>
+                <td>{{ "{:,.2f}".format((latest.water_unit - previous.water_unit) * room.water_rate) if latest and previous else "0.00" }}</td>
+            </tr>
+
+            <!-- ค่าไฟ -->
+            <tr>
+                <td>ค่าไฟ</td>
+                <td>{{ previous.electricity_unit if previous else 0 }} / {{ latest.electricity_unit if latest else 0 }}</td>
+                <td>{{ latest.electricity_unit - previous.electricity_unit if latest and previous else 0 }} หน่วย</td>
+                <td>{{ "{:,.2f}".format(room.electricity_rate) }}</td>
+                <td>{{ "{:,.2f}".format((latest.electricity_unit - previous.electricity_unit) * room.electricity_rate) if latest and previous else "0.00" }}</td>
+            </tr>
+
+            <!-- รวมทั้งหมด -->
+            <tr class="table-primary fw-bold">
+                <td colspan="4" class="text-end">รวมทั้งสิ้น</td>
+                <td>{{ "{:,.2f}".format(
+                    room.room_price +
+                    ((latest.water_unit - previous.water_unit) * room.water_rate if latest and previous else 0) +
+                    ((latest.electricity_unit - previous.electricity_unit) * room.electricity_rate if latest and previous else 0)
+                ) }}</td>
+            </tr>
+        </tbody>
+    </table>
+
+    <p class="text-end mt-4">ลงชื่อ.....................................</p>
+    <p class="text-end text-muted"><small>พิมพ์เมื่อ: {{ now.strftime("%d/%m/%Y %H:%M") }}</small></p>
+
+    <!-- ปุ่มพิมพ์และกลับหน้าหลัก -->
+    <div class="text-center mt-4 no-print">
+        <button onclick="window.print()" class="btn btn-primary">พิมพ์ใบเสร็จ</button>
+        <a href="{{ url_for('home') }}" class="btn btn-secondary">กลับหน้าหลัก</a>
+    </div>
+
+    <!-- ฟอร์มแก้ไขหน่วยล่าสุด -->
+    <hr class="mt-5">
+    <h5>แก้ไขหน่วยน้ำและไฟล่าสุด</h5>
+    <form method="post" action="{{ url_for('edit_latest_meter', room_id=room.id) }}">
+        <div class="row g-3 align-items-center">
+            <div class="col-auto">
+                <label for="water_unit" class="col-form-label">หน่วยน้ำล่าสุด:</label>
+            </div>
+            <div class="col-auto">
+                <input type="number" min="0" id="water_unit" name="water_unit" class="form-control" required
+                       value="{{ latest.water_unit if latest else '' }}">
+            </div>
+
+            <div class="col-auto">
+                <label for="electricity_unit" class="col-form-label">หน่วยไฟล่าสุด:</label>
+            </div>
+            <div class="col-auto">
+                <input type="number" min="0" id="electricity_unit" name="electricity_unit" class="form-control" required
+                       value="{{ latest.electricity_unit if latest else '' }}">
+            </div>
+
+            <div class="col-auto">
+                <label for="recorded_month" class="col-form-label">เดือน:</label>
+            </div>
+            <div class="col-auto">
+                <input type="month" id="recorded_month" name="recorded_month" class="form-control" required
+                       value="{{ latest.recorded_at[:7] if latest and latest.recorded_at else '' }}">
+            </div>
+
+            <div class="col-auto">
+                <button type="submit" class="btn btn-success">บันทึก</button>
+            </div>
+        </div>
+    </form>
+</div>
+</body>
+</html>
