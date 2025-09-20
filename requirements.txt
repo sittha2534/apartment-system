@@ -1,4 +1,8 @@
+<<<<<<< HEAD
 Flask==2.3.3
+=======
+﻿Flask==2.3.3
+>>>>>>> bcc5e48 (Fix packages for Render)
 pandas==2.2.0
 numpy==1.26.2
 openpyxl==3.1.3
