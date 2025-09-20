@@ -4,8 +4,10 @@ from datetime import datetime
 import os
 
 app = Flask(__name__)
-app.secret_key = 'your_secret_key'
-DB_FILE = "rooms.db"
+app.secret_key = os.environ.get("SECRET_KEY", "your_secret_key")
+
+# ใช้ environment variable สำหรับ DB ไฟล์
+DB_FILE = os.environ.get("DB_FILE", "rooms.db")
 
 # ------------------------------
 # สร้างฐานข้อมูลและ user เริ่มต้น ถ้าไม่มี
@@ -72,7 +74,6 @@ if not os.path.exists(DB_FILE):
 # ------------------------------
 # Routes
 # ------------------------------
-
 @app.route('/login', methods=['GET', 'POST'])
 def login():
     if request.method == 'POST':
@@ -312,9 +313,9 @@ def test_db():
     except Exception as e:
         return f"❌ Cannot connect to DB: {e}"
 
-import os
-
+# ------------------------------
+# Run
+# ------------------------------
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port)
-
