@@ -6,8 +6,11 @@ import os
 app = Flask(__name__)
 app.secret_key = os.environ.get("SECRET_KEY", "your_secret_key")
 
-# ใช้ environment variable สำหรับ DB ไฟล์
-DB_FILE = os.environ.get("DB_FILE", "rooms.db")
+# ------------------------------
+# ตั้งค่า DB เก็บใน instance/
+# ------------------------------
+DB_FILE = os.environ.get("DB_FILE", os.path.join(app.instance_path, "rooms.db"))
+os.makedirs(app.instance_path, exist_ok=True)  # สร้างโฟลเดอร์ instance ถ้ายังไม่มี
 
 # ------------------------------
 # สร้างฐานข้อมูลและ user เริ่มต้น ถ้าไม่มี
@@ -55,7 +58,7 @@ def init_db():
     """)
     conn.commit()
     conn.close()
-    print("✅ Database initialized")
+    print("✅ Database initialized at", DB_FILE)
 
 # ------------------------------
 # ฟังก์ชันเชื่อมต่อ DB
